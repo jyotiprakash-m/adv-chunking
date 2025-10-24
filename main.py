@@ -8,6 +8,7 @@ and configures CORS so your Next.js frontend can call it freely.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers.chunk_router import router as chunk_router
+from routers.career_center_router import router as career_center_router
 
 # =========================================
 # ✅ Initialize FastAPI app
@@ -39,6 +40,7 @@ app.add_middleware(
 # 📦 Include Routers
 # =========================================
 app.include_router(chunk_router)
+app.include_router(career_center_router)
 
 # =========================================
 # 🏁 Root endpoint
