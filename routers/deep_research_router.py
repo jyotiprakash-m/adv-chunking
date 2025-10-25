@@ -7,13 +7,12 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from agents import Runner, trace, gen_trace_id,Agent,OpenAIChatCompletionsModel,WebSearchTool,ModelSettings,function_tool
+from agents import Runner, trace, gen_trace_id, Agent, OpenAIChatCompletionsModel, WebSearchTool, ModelSettings, function_tool
 from dotenv import load_dotenv
 import os
 from openai import AsyncOpenAI
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
-
 
 # Load environment variables from .env file
 load_dotenv()
@@ -47,14 +46,12 @@ class DeepResearchRequest(BaseModel):
 class ReportData(BaseModel):
     """Response containing the final research report."""
     short_summary: str = Field(description="A short 2-3 sentence summary of the findings.")
-
     markdown_report: str = Field(description="The final report")
-
     follow_up_questions: list[str] = Field(description="Suggested topics to research further")
+
 
 class WebSearchItem(BaseModel):
     reason: str = Field(description="Your reasoning for why this search is important to the query.")
-
     query: str = Field(description="The search term to use for the web search.")
 
 
@@ -107,22 +104,30 @@ def model_selector(sln: int) -> Any:
             model="llama3.2:3b",
             openai_client=ollama_client
         ),
-        3: OpenAIChatCompletionsModel(
-            model="qwen/qwen3-30b-a3b:free",
-            openai_client=openrouter_client
-        ),
         2: OpenAIChatCompletionsModel(
             model="deepseek/deepseek-r1-distill-llama-70b:free",
+            openai_client=openrouter_client
+        ),
+        3: OpenAIChatCompletionsModel(
+            model="qwen/qwen3-30b-a3b:free",
             openai_client=openrouter_client
         ),
         4: OpenAIChatCompletionsModel(
             model="gpt-4o-mini",
             openai_client=openai_client
         ),
+        5: OpenAIChatCompletionsModel(
+            model="gpt-5-mini",
+            openai_client=openai_client
+        ),
+        6: OpenAIChatCompletionsModel(
+            model="gpt-4.1-mini",
+            openai_client=openai_client
+        )
     }
 
     # --- Return selected model (default → Ollama LLaMA) ---
-    return models.get(sln, models[1])
+    return models.get(sln, models[4])
 
 
 class ResearchManager:
@@ -133,22 +138,22 @@ class ResearchManager:
         
         # Different Agents can be selected based on workflow_models in request
 
-        logging.info("DeepResearchRequest received by :", request.email, request)
+        logger.info(request)
 
         #####
-        # PLANNER_AGENT
+        # PLANNER_AGENT :Capable Model 1,2(rate limit bound),3(rate limit bound),4
         #####   
         PLANNER_AGENT_INSTRUCTIONS = f"You are a helpful research assistant. Given a query, come up with a set of web searches \
         to perform to best answer the query. Output {request.search_count} terms to query for."
         planner_agent = Agent(
             name="PlannerAgent",
             instructions=PLANNER_AGENT_INSTRUCTIONS,
-            model=model_selector(request.workflow_models.get("search_plan", 1)),
+            model=model_selector(request.workflow_models.get("search_plan", 4)),
             output_type=WebSearchPlan,
         )
         
         #####
-        # SEARCH_AGENT
+        # SEARCH_AGENT :Capable Model 4,5,6
         #####
         SEARCH_AGENT_INSTRUCTIONS = "You are a research assistant. Given a search term, you search the web for that term and \
         produce a concise summary of the results. The summary must 2-3 paragraphs and less than 300 \
@@ -156,17 +161,28 @@ class ResearchManager:
         grammar. This will be consumed by someone synthesizing a report, so it's vital you capture the \
         essence and ignore any fluff. Do not include any additional commentary other than the summary itself."
 
+        search_model = request.workflow_models.get("perform_search", 4)
+        # switch case
+        if search_model == 4:
+            model_name = "gpt-4o-mini"
+        elif search_model == 5:
+            model_name = "gpt-5-mini"
+        elif search_model == 6:
+            model_name = "gpt-4.1-mini"
+        else:
+            model_name = "gpt-4o-mini"
+
         search_agent = Agent(
             name="Search agent",
             instructions=SEARCH_AGENT_INSTRUCTIONS,
             tools=[WebSearchTool(search_context_size="low")],
-            model="gpt-4o-mini",
+            model=model_name,
             model_settings=ModelSettings(tool_choice="required"),
         )
         
         
         #####
-        # WRITER_AGENT
+        # WRITER_AGENT :Capable Model 2(rate limit bound),3(rate limit bound),4,5,6
         #####
         WRITER_AGENT_INSTRUCTIONS = (
         "You are a senior researcher tasked with writing a cohesive report for a research query. "
@@ -183,7 +199,7 @@ class ResearchManager:
         output_type=ReportData,
       )
         #####
-        # EMAIL_AGENT
+        # EMAIL_AGENT :Capable Model 4,5,6
         #####
         
         EMAIL_AGENT_INSTRUCTIONS = """You are able to send a nicely formatted HTML email based on a detailed report.
@@ -289,7 +305,7 @@ class ResearchManager:
         payload = f"Original query: {query}\nSummarized search results: {search_results}"
         result = await Runner.run(writer_agent, payload)
         logger.info("Finished writing report")
-        return result.final_output_as(ReportData)
+        return result.final_output
 
     async def send_email(self, report: ReportData, email_agent: Agent) -> ReportData:
         """Delegate email composition to the email agent."""
@@ -301,14 +317,14 @@ class ResearchManager:
 
 
 @router.post("/run", response_model=ReportData)
-async def run_deep_research(payload: DeepResearchRequest) -> JSONResponse:
+async def run_deep_research(payload: DeepResearchRequest) -> ReportData:
     """Run deep research and return the final report."""
 
     manager = ResearchManager()
 
     try:
         report = await manager.run(payload)
-        return JSONResponse(content={"report": report})
+        return report
     except Exception as e:
         logger.error(f"Deep research failed: {e}")
         raise HTTPException(
