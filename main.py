@@ -9,13 +9,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers.chunk_router import router as chunk_router
 from routers.career_center_router import router as career_center_router
+from routers.deep_research_router import router as deep_research_router
 
 # =========================================
 # ✅ Initialize FastAPI app
 # =========================================
 app = FastAPI(
-    title="PDF Chunking & RAG API",
-    description="API backend for document chunking, processing, and RAG workflows",
+    title="Generative Artificial Intelligence API",
+    description="Api backend for various AI-powered functionalities",
     version="1.0.0",
 )
 
@@ -24,8 +25,7 @@ app = FastAPI(
 # =========================================
 # You can update `origins` later to your frontend’s actual domain
 origins = [
-    "http://localhost:3000",  # Next.js local dev
-    "https://jyoti-prakash-mohanta.vercel.app",  # production frontend
+    "http://localhost:3000",
 ]
 
 app.add_middleware(
@@ -41,6 +41,7 @@ app.add_middleware(
 # =========================================
 app.include_router(chunk_router)
 app.include_router(career_center_router)
+app.include_router(deep_research_router)
 
 # =========================================
 # 🏁 Root endpoint
@@ -48,9 +49,11 @@ app.include_router(career_center_router)
 @app.get("/", tags=["Root"])
 def root():
     return {
-        "message": "Welcome to the PDF Chunking & RAG API 🚀",
+        "message": "Welcome to the Generative Artificial Intelligence API 🚀",
         "endpoints": {
             "POST /chunk": "Upload a PDF and get its text chunks.",
+            "POST /deep-research/run": "Perform deep research on a query and get a detailed report.",
+            "POST /career/chat": "Get in touch via the Career Center chatbot."
         }
     }
 
