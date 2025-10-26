@@ -22,5 +22,6 @@ dependencies = [
     "rich>=14.2.0",
     "semantic-text-splitter>=0.28.0",
     "sendgrid>=6.12.5",
+    "sqlmodel>=0.0.27",
     "uvicorn>=0.38.0",
 ]
