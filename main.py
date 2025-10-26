@@ -12,16 +12,17 @@ from routers.chunk_router import router as chunk_router
 from routers.career_center_router import router as career_center_router
 from routers.deep_research_router import router as deep_research_router
 from routers.healthcare_assistant.doctors import router as healthcare_router
+from routers.healthcare_assistant.healthcare_router import router as healthcare_agent_router
 from utils.database import init_db
 
 
 # ✅ Modern lifespan event system
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 Starting up...")
+    print("🚀 Starting up db...")
     init_db()   # Initialize the database
     yield
-    print("🛑 Shutting down...")
+    print("🛑 Shutting down db...")
 
 # =========================================
 # ✅ Initialize FastAPI app
@@ -58,6 +59,7 @@ app.include_router(chunk_router)
 app.include_router(career_center_router)
 app.include_router(deep_research_router)
 app.include_router(healthcare_router)
+app.include_router(healthcare_agent_router)
 
 # =========================================
 # 🏁 Root endpoint

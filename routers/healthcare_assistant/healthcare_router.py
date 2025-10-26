@@ -19,8 +19,12 @@ import tempfile
 # Load environment variables from .env file
 load_dotenv()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with timestamps
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/healthcare-assistant", tags=["Healthcare Assistant"])
@@ -29,6 +33,11 @@ router = APIRouter(prefix="/healthcare-assistant", tags=["Healthcare Assistant"]
 class HealthcareRequest(BaseModel):
     file: UploadFile = Field(..., description="Uploaded medical document file")
     email: str = Field(..., description="User's email address for sending the summary")
+    
+class OCRResponse(BaseModel):
+    text: str
+    pages: int
+    confidence: float
 
 class HealthManager:
     """Manages health-related operations."""
@@ -114,6 +123,7 @@ class HealthManager:
             instructions=OCR_AGENT_INSTRUCTIONS,
             tools=[extract_text_from_file],
             model="gpt-4o-mini",
+            output_type=OCRResponse,
         )
 
         # Trace and Execute
@@ -139,21 +149,40 @@ class HealthManager:
 
     async def perform_ocr(self, file: UploadFile, ocr_agent: Agent) -> str:
         """Perform OCR on the uploaded file and return extracted text."""
-        # Ensure filename is a string (handle None) and provide a fallback suffix
         filename = file.filename or ""
         ext = os.path.splitext(filename)[-1] or ".tmp"
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             file_path = tmp.name
             contents = await file.read()
             tmp.write(contents)
-        
-        # Call the OCR agent to extract text
-        result = await Runner.run(ocr_agent,file_path)
+
+        try:
+            run_result = await Runner.run(ocr_agent, file_path)
+
+            if isinstance(run_result, OCRResponse):
+                result = run_result.text
+            elif isinstance(run_result, dict) and "text" in run_result:
+                if isinstance(run_result["text"], bytes):
+                    result = run_result["text"].decode("utf-8", errors="ignore")
+                else:
+                    result = str(run_result["text"])
+            elif isinstance(run_result, bytes):
+                result = run_result.decode("utf-8", errors="ignore")
+            else:
+                result = str(run_result)
+
+        finally:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
         return result
+
 
     async def analyze_medical_data(self, text: str) -> str:
         """Analyze the extracted medical data and generate a summary."""
         # Simulate medical data analysis
+        logger.info(text)
+        logger.info("Analyzing text of length %d", len(text))
         await asyncio.sleep(1)
         return "Medical summary based on the extracted data."
 
