@@ -60,9 +60,9 @@ class HealthManager:
             logger.info("Medical data analyzed.")
 
             logger.info("Scheduling appointment.")
-            appointment_details = await self.schedule_appointment(email, medical_summary)
-            summary_email_content = f"{medical_summary}\n\n{appointment_details}"
-            logger.info("Appointment scheduled. %s", appointment_details)
+            final_email_details = await self.schedule_appointment(email, medical_summary)
+            summary_email_content = f"{medical_summary}\n\n{final_email_details}"
+            logger.info("Appointment scheduled. %s", final_email_details[:100])
 
             return summary_email_content
         
@@ -263,9 +263,62 @@ class HealthManager:
         )
         specialist = await Runner.run(specialist_agent, medical_summary)
         specialist_info = getattr(specialist, "final_output", None) or getattr(specialist, "output", None)
-        logger.info(specialist_info)
 
-        return str(specialist_info)
+        # Email sending
+        EMAIL_AGENT_INSTRUCTIONS = """You are able to send a nicely formatted HTML email based on a detailed report.
+        You will be provided with a detailed report. You should use your tool to send one email, providing the 
+        report converted into clean, well presented HTML with an appropriate subject line.
+        
+        Schedule appointment email with the provided medical summary and specialist information.
+        
+        Write the exact Medical Summary what is provided to you.
+        
+        Example Schedule Appointment: (In Tabular Format)
+        
+        +----------------+----------------+----------------+----------------+----------------+----------------+-----------------------------------+
+        | Doctor Name    | Specialist     | Hospital       | Contact No     | Email          | Education               | Schedule Date            |
+        +----------------+----------------+----------------+----------------+----------------+----------------+-----------------------------------+
+        | Dr. John Doe   | Cardiologist   | City Hospital  | 123-456-7890   | dr.johndoe@hospital.com | MD, Cardiology | 2023-10-15 10:00 AM (EST)|
+        +----------------+----------------+----------------+----------------+----------------+----------------+-----------------------------------+
+
+        """
+        
+
+        @function_tool
+        def send_email(subject: str, html_body: str) -> Dict[str, str]:
+            """Send an email using SendGrid with the given subject and HTML body."""
+            SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+
+            if not SENDGRID_API_KEY:
+                return {"status": "error", "message": "SENDGRID_API_KEY not found"}
+
+            try:
+                message = Mail(
+                    from_email=os.getenv("FROM_EMAIL", "justdevaplaying@gmail.com"),
+                    to_emails=os.getenv("TO_EMAIL", email),
+                    subject=subject,
+                    html_content=html_body,
+                )
+
+                sendgrid_client = SendGridAPIClient(SENDGRID_API_KEY)
+                response = sendgrid_client.send(message)
+
+                return {
+                    "status": "success",
+                    "code": response.status_code,
+                }
+
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+        
+        email_agent = Agent(
+            name="Email agent",
+            instructions=EMAIL_AGENT_INSTRUCTIONS,
+            tools=[send_email],
+            model="gpt-4o-mini",
+        )
+        final_email_content = await Runner.run(email_agent, f"Send the following medical appointment details to {email}:\n\n Specialist Information: {specialist_info} \n\n Medical Summary: {medical_summary}")
+        return str(final_email_content)
 
 
 @router.post("/run", response_model=Dict[str, Any])
