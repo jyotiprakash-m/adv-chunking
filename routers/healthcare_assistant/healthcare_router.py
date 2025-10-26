@@ -17,6 +17,9 @@ from PyPDF2 import PdfReader
 from routers.healthcare_assistant.doctors import Doctor
 from utils.database import DATABASE_URL,engine
 from sqlmodel import  Field, Session, select
+import base64
+import mimetypes
+from sendgrid.helpers.mail import Attachment, FileContent, FileName, FileType, Disposition
 
 # Load environment variables from .env file
 load_dotenv()
@@ -60,7 +63,7 @@ class HealthManager:
             logger.info("Medical data analyzed.")
 
             logger.info("Scheduling appointment.")
-            final_email_details = await self.schedule_appointment(email, medical_summary)
+            final_email_details = await self.schedule_appointment(email, medical_summary, file_path)
             summary_email_content = f"{medical_summary}\n\n{final_email_details}"
             logger.info("Appointment scheduled. %s", final_email_details[:100])
 
@@ -212,7 +215,7 @@ class HealthManager:
         logger.info("Medical summary generated successfully.")
         return str(summary)
 
-    async def schedule_appointment(self, email: str, medical_summary: str) -> str:
+    async def schedule_appointment(self, email: str, medical_summary: str, file_path: Optional[str] = None) -> str:
         """Schedule an appointment and return confirmation details."""
         # Simulate appointment scheduling
         # Agent will find out the specialist and schedule accordingly
@@ -281,12 +284,13 @@ class HealthManager:
         | Dr. John Doe   | Cardiologist   | City Hospital  | 123-456-7890   | dr.johndoe@hospital.com | MD, Cardiology | 2023-10-15 10:00 AM (EST)|
         +----------------+----------------+----------------+----------------+----------------+----------------+-----------------------------------+
 
+        If possible, attach the original PDF file to the email for reference.
         """
         
 
         @function_tool
-        def send_email(subject: str, html_body: str) -> Dict[str, str]:
-            """Send an email using SendGrid with the given subject and HTML body."""
+        def send_email(subject: str, html_body: str, attachment_path: Optional[str] = None) -> Dict[str, str]:
+            """Send an email using SendGrid with the given subject and HTML body. Optionally attach a file."""
             SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 
             if not SENDGRID_API_KEY:
@@ -299,6 +303,24 @@ class HealthManager:
                     subject=subject,
                     html_content=html_body,
                 )
+
+                # Attach file if provided
+                if attachment_path and os.path.exists(attachment_path):
+                    with open(attachment_path, 'rb') as f:
+                        file_data = f.read()
+                    encoded_file = base64.b64encode(file_data).decode()
+                    filename = os.path.basename(attachment_path)
+                    mimetype, _ = mimetypes.guess_type(attachment_path)
+                    if not mimetype:
+                        mimetype = 'application/octet-stream'  # Fallback
+
+                    attachment = Attachment(
+                        FileContent(encoded_file),
+                        FileName(filename),
+                        FileType(mimetype),
+                        Disposition('attachment')
+                    )
+                    message.add_attachment(attachment)
 
                 sendgrid_client = SendGridAPIClient(SENDGRID_API_KEY)
                 response = sendgrid_client.send(message)
@@ -317,7 +339,11 @@ class HealthManager:
             tools=[send_email],
             model="gpt-4o-mini",
         )
-        final_email_content = await Runner.run(email_agent, f"Send the following medical appointment details to {email}:\n\n Specialist Information: {specialist_info} \n\n Medical Summary: {medical_summary}")
+        # Pass file_path in the input so the agent can use it
+        input_text = f"Send the following medical appointment details to {email}:\n\n Specialist Information: {specialist_info} \n\n Medical Summary: {medical_summary}"
+        if file_path:
+            input_text += f"\n\nAttach the PDF from: {file_path}"
+        final_email_content = await Runner.run(email_agent, input_text)
         return str(final_email_content)
 
 
@@ -336,14 +362,14 @@ async def run_healthcare_assistant(
             contents = await file.read()
             tmp.write(contents)
 
-        # await the manager run and return its result
+        # Pass file_path to schedule_appointment
         result = await health_manager.run(file_path, email)
 
     except Exception as e:
         logger.error(f"Health analysis error: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal Server Error")
     finally:
-        # Clean up the temporary file if it exists
+        # Clean up the temporary file after everything is done
         if file_path and os.path.exists(file_path):
             try:
                 os.unlink(file_path)
@@ -353,4 +379,4 @@ async def run_healthcare_assistant(
     return {
         "status": "success",
         "summary_email_content": result,
-        }
+    }
