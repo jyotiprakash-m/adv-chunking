@@ -41,96 +41,73 @@ class OCRResponse(BaseModel):
 class HealthManager:
     """Manages health-related operations."""
 
-    async def run(self, file_path, email):
-
-        # =====================
-        # OCR Agent
-        # =====================
-
-        # tools
-
-        @function_tool
-        def extract_text_from_file(
-            image_path: str,
-            task_type: str = "default",
-            max_tokens: int = 16000,
-            temperature: float = 0.1,
-            top_p: float = 0.6,
-            repetition_penalty: float = 1.2,
-            pages: Optional[List[int]] = None
-        ) -> str:
-            """
-            Extracts text from an image or PDF using the OpenTyphoon OCR API.
-            """
-            url = os.getenv('OPEN_ROUTER_OCR_BASE_URL')
-            
-            if not url:
-                raise ValueError("OPEN_ROUTER_OCR_BASE_URL is not set in environment variables.")
-
-            # Determine pages to extract if not specified
-            if pages is None:
-                if image_path.lower().endswith('.pdf'):
-                    reader = PdfReader(image_path)
-                    num_pages = len(reader.pages)
-                    pages = list(range(1, num_pages + 1))  # 1-based indexing
-                else:
-                    pages = [1]  # Assume single page for images
-
-            with open(image_path, 'rb') as file:
-                files = {'file': file}
-                data = {
-                    'task_type': task_type,
-                    'max_tokens': str(max_tokens),
-                    'temperature': str(temperature),
-                    'top_p': str(top_p),
-                    'repetition_penalty': str(repetition_penalty),
-                    'pages': json.dumps(pages)  # Always send pages
-                }
-                
-                api_key = os.getenv('OPENTYPHOON_API_KEY')
-                if not api_key:
-                    raise ValueError("OPENTYPHOON_API_KEY is not set in environment variables.")
-
-                headers = {'Authorization': f'Bearer {api_key}'}
-                response = requests.post(url, files=files, data=data, headers=headers)
-
-                if response.status_code == 200:
-                    result = response.json()
-                    extracted_texts = []
-                    for page_result in result.get('results', []):
-                        if page_result.get('success') and page_result.get('message'):
-                            content = page_result['message']['choices'][0]['message']['content']
-                            try:
-                                parsed_content = json.loads(content)
-                                text = parsed_content.get('natural_text', content)
-                            except json.JSONDecodeError:
-                                text = content
-                            extracted_texts.append(text)
-                        elif not page_result.get('success'):
-                            logging.error(f"Error processing {page_result.get('filename', 'unknown')}: {page_result.get('error', 'Unknown error')}")
-                    logging.info("OCR extraction completed. %d pages processed.", len(extracted_texts))
-                    return '\n'.join(extracted_texts)
-
-                else:
-                    logging.error(f"Error: {response.status_code} - {response.text}")
-                    return f"Error: {response.status_code} - {response.text}"
-
-
-  
-        OCR_AGENT_INSTRUCTIONS = """
-        You are an OCR agent for medical documents.
-        Extract clear, well-formatted text from the document located at the given file path (URL or local path): {file_path}.
-        Return structured output as defined in the OCRResponse model.
+    def extract_text_from_file(
+        self,
+        image_path: str,
+        task_type: str = "default",
+        max_tokens: int = 16000,
+        temperature: float = 0.1,
+        top_p: float = 0.6,
+        repetition_penalty: float = 1.2,
+        pages: Optional[List[int]] = None
+    ) -> str:
         """
+        Extracts text from an image or PDF using the OpenTyphoon OCR API.
+        """
+        url = os.getenv('OPEN_ROUTER_OCR_BASE_URL')
         
-        ocr_agent = Agent(
-            name="OCR Extractor",
-            instructions=OCR_AGENT_INSTRUCTIONS,
-            tools=[extract_text_from_file],
-            model="gpt-4o-mini",
-            model_settings=ModelSettings(temperature=0.1),  # Low temperature for accuracy
-            output_type=OCRResponse,
-        )
+        if not url:
+            raise ValueError("OPEN_ROUTER_OCR_BASE_URL is not set in environment variables.")
+
+        # Determine pages to extract if not specified
+        if pages is None:
+            if image_path.lower().endswith('.pdf'):
+                reader = PdfReader(image_path)
+                num_pages = len(reader.pages)
+                pages = list(range(1, num_pages + 1))  # 1-based indexing
+            else:
+                pages = [1]  # Assume single page for images
+
+        with open(image_path, 'rb') as file:
+            files = {'file': file}
+            data = {
+                'task_type': task_type,
+                'max_tokens': str(max_tokens),
+                'temperature': str(temperature),
+                'top_p': str(top_p),
+                'repetition_penalty': str(repetition_penalty),
+                'pages': json.dumps(pages)  # Always send pages
+            }
+            
+            api_key = os.getenv('OPENTYPHOON_API_KEY')
+            if not api_key:
+                raise ValueError("OPENTYPHOON_API_KEY is not set in environment variables.")
+
+            headers = {'Authorization': f'Bearer {api_key}'}
+            response = requests.post(url, files=files, data=data, headers=headers)
+
+            if response.status_code == 200:
+                result = response.json()
+                extracted_texts = []
+                for page_result in result.get('results', []):
+                    if page_result.get('success') and page_result.get('message'):
+                        content = page_result['message']['choices'][0]['message']['content']
+                        try:
+                            parsed_content = json.loads(content)
+                            text = parsed_content.get('natural_text', content)
+                        except json.JSONDecodeError:
+                            text = content
+                        extracted_texts.append(text)
+                    elif not page_result.get('success'):
+                        logging.error(f"Error processing {page_result.get('filename', 'unknown')}: {page_result.get('error', 'Unknown error')}")
+                logging.info("OCR extraction completed. %d pages processed.", len(extracted_texts))
+                return '\n'.join(extracted_texts)
+
+            else:
+                logging.error(f"Error: {response.status_code} - {response.text}")
+                return f"Error: {response.status_code} - {response.text}"
+
+    async def run(self, file_path, email):
 
         # Trace and Execute
         trace_id = gen_trace_id()
@@ -141,7 +118,7 @@ class HealthManager:
 
             logger.info("Performing OCR on the uploaded file.")
             # use the provided file path and email parameters (request was undefined)
-            extracted_text = await self.perform_ocr(file_path, ocr_agent)
+            extracted_text = await self.perform_ocr(file_path)
 
             logger.info("Analyzing medical data.")
             medical_summary = await self.analyze_medical_data(extracted_text)
@@ -153,43 +130,22 @@ class HealthManager:
             logger.info("Appointment scheduled. %s", appointment_details)
 
             return summary_email_content
-    async def perform_ocr(self, file_path: str, ocr_agent: Agent) -> str:
+    async def perform_ocr(self, file_path: str) -> str:
         """Perform OCR on the provided file path and return the extracted text."""
         try:
             logger.info(f"Performing OCR for file: {file_path}")
-            run_result = await Runner.run(ocr_agent, file_path)
-            output = getattr(run_result, "output", None)
+            # Call the OCR function directly instead of using the agent
+            result = self.extract_text_from_file(file_path)
+            logger.info(f"OCR result: {result[:100]}...")  # Log first 100 chars
 
-            logger.info(f"OCR output: {output}")
-
-            if output is None:
-                raise ValueError("No output returned from OCR agent.")
-
-            # Case 1: Structured OCRResponse
-            if isinstance(output, OCRResponse):
-                return output.extracted_text
-
-            # Case 2: Dictionary output
-            if isinstance(output, dict):
-                text_data = (
-                    output.get("extracted_text")
-                    or output.get("text")
-                    or output.get("data")
-                )
-                if text_data is None:
-                    raise ValueError("No text field found in OCR output.")
-                return text_data.decode("utf-8", errors="replace") if isinstance(text_data, bytes) else str(text_data)
-
-            # Case 3: Raw bytes output
-            if isinstance(output, bytes):
-                return output.decode("utf-8", errors="replace")
-
-            # Fallback: convert anything else to string
-            return str(output)
+            # Ensure the result is valid UTF-8 to prevent JSON encoding errors
+            result = result.encode('utf-8', errors='replace').decode('utf-8')
 
         except Exception as e:
-            # Log or handle exceptions cleanly
-            raise RuntimeError(f"OCR processing failed for {file_path}: {e}")
+            logger.error(f"OCR processing failed for {file_path}: {e}")
+            return f"OCR processing failed: {e}"
+
+        return result
 
     async def analyze_medical_data(self, text: str) -> str:
         """Summarize the extracted medical text using a summarization agent."""
