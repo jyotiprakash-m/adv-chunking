@@ -64,7 +64,7 @@ class HealthManager:
 
             logger.info("Scheduling appointment.")
             final_email_details = await self.schedule_appointment(email, medical_summary, file_path)
-            summary_email_content = f"{medical_summary}\n\n{final_email_details}"
+            summary_email_content = f"{trace_message}\n\n{medical_summary}\n\n{final_email_details}"
             logger.info("Appointment scheduled. %s", final_email_details[:100])
 
             return summary_email_content
@@ -344,7 +344,8 @@ class HealthManager:
         if file_path:
             input_text += f"\n\nAttach the PDF from: {file_path}"
         final_email_content = await Runner.run(email_agent, input_text)
-        return str(final_email_content)
+        final_email_content_output = getattr(final_email_content, "final_output", None) or getattr(final_email_content, "output", None)
+        return str(final_email_content_output)
 
 
 @router.post("/run", response_model=Dict[str, Any])

@@ -13,7 +13,7 @@ from routers.career_center_router import router as career_center_router
 from routers.deep_research_router import router as deep_research_router
 from routers.healthcare_assistant.doctors import router as healthcare_router
 from routers.healthcare_assistant.healthcare_router import router as healthcare_agent_router
-from routers.healthcare_assistant.ocr_test import router as healthcare_test_router
+from routers.healthcare_assistant.patient import router as patient_router
 from utils.database import init_db
 
 
@@ -61,7 +61,7 @@ app.include_router(career_center_router)
 app.include_router(deep_research_router)
 app.include_router(healthcare_router)
 app.include_router(healthcare_agent_router)
-app.include_router(healthcare_test_router)
+app.include_router(patient_router)
 
 # =========================================
 # 🏁 Root endpoint
