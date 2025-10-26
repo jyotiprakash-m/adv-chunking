@@ -41,6 +41,11 @@ def get_doctors(
 def get_doctor(doctor_id: int, session: Session = Depends(get_session)):
     return find_doctor_by_id(doctor_id, session)
 
+# POST - Add multiple doctors for testing
+@router.post("/doctors/bulk/", response_model=list[Doctor])
+def add_multiple_doctors(doctors: list[Doctor], session: Session = Depends(get_session)):
+    return create_multiple_doctors(doctors, session)
+
 # =========================================
 # Services and Utilities
 # =========================================
@@ -68,3 +73,11 @@ def find_doctor_by_id(doctor_id: int, session: Session) -> Doctor:
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found")
     return doctor
+# Create multiple doctors for testing
+def create_multiple_doctors(doctors: list[Doctor], session: Session) -> list[Doctor]:
+    """Add multiple doctors to the database."""
+    session.add_all(doctors)
+    session.commit()
+    for doctor in doctors:
+        session.refresh(doctor)
+    return doctors

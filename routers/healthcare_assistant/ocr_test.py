@@ -80,7 +80,7 @@ def extract_text_from_file(
 @router.post("/test-extract-text")
 async def test_extract_text(file: UploadFile = File(...)):
     # Save uploaded file to a temporary file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file: # type: ignore
         contents = await file.read()
         temp_file.write(contents)
         temp_file_path = temp_file.name
