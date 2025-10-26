@@ -249,15 +249,17 @@ class HealthManager:
                 logger.error("DB Error:", e)
                 return []
 
-
         specialist_agent = Agent(
             name="Specialist Finder",
             instructions="""
             You are an agent that helps find medical specialists based on the provided medical summary.
-            Given a medical summary, identify the relevant specialist type (e.g., cardiologist, neurologist).
-            Use the `get_doctors_by_specialist` tool to retrieve a list of available doctors in that specialization.
-            Return a brief confirmation message including the specialist type, sample doctor's name, and contact information,hospital, and education.
+            Given a medical summary, identify the relevant specialist type(s) (e.g., cardiologist, neurologist, hematologist, nutritionist).
+            For each identified specialist, use the `get_doctors_by_specialist` tool to retrieve a list of available doctors.
+            - If doctors are found, include a sample doctor's details (name, hospital, contact, etc.) in your response.
+            - If no doctors are found for a specialist (empty list), note that no doctors are currently available for that specialization and suggest contacting the hospital directly for alternatives.
+            Return a brief confirmation message including the specialist type(s), available doctor details (if any), and any notes on unavailable ones.
 
+            Do not call the tool repeatedly for the same specialist. If a specialist has no data, move on and include a note in the response.
             Return the final information as plain text (no JSON).
             """,
             tools=[get_doctors_by_specialist],
