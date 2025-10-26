@@ -40,7 +40,31 @@ class OCRResponse(BaseModel):
 
 class HealthManager:
     """Manages health-related operations."""
+    
+    async def run(self, file_path, email):
 
+        # Trace and Execute
+        trace_id = gen_trace_id()
+        with trace("HealthCare Analysis", trace_id=trace_id):
+            logger.info("Starting healthcare analysis workflow.")
+            trace_message = f"View trace: https://platform.openai.com/traces/trace?trace_id={trace_id}"
+            logger.info(trace_message)
+
+            logger.info("Performing OCR on the uploaded file.")
+            # use the provided file path and email parameters (request was undefined)
+            extracted_text = await self.perform_ocr(file_path)
+
+            logger.info("Analyzing medical data.")
+            medical_summary = await self.analyze_medical_data(extracted_text)
+            logger.info("Medical data analyzed.")
+
+            logger.info("Scheduling appointment.")
+            appointment_details = await self.schedule_appointment(email)
+            summary_email_content = f"{medical_summary}\n\n{appointment_details}"
+            logger.info("Appointment scheduled. %s", appointment_details)
+
+            return summary_email_content
+        
     def extract_text_from_file(
         self,
         image_path: str,
@@ -107,30 +131,6 @@ class HealthManager:
                 logging.error(f"Error: {response.status_code} - {response.text}")
                 return f"Error: {response.status_code} - {response.text}"
 
-
-    async def run(self, file_path, email):
-
-        # Trace and Execute
-        trace_id = gen_trace_id()
-        with trace("HealthCare Analysis", trace_id=trace_id):
-            logger.info("Starting healthcare analysis workflow.")
-            trace_message = f"View trace: https://platform.openai.com/traces/trace?trace_id={trace_id}"
-            logger.info(trace_message)
-
-            logger.info("Performing OCR on the uploaded file.")
-            # use the provided file path and email parameters (request was undefined)
-            extracted_text = await self.perform_ocr(file_path)
-
-            logger.info("Analyzing medical data.")
-            medical_summary = await self.analyze_medical_data(extracted_text)
-            logger.info("Medical data analyzed.")
-
-            logger.info("Scheduling appointment.")
-            appointment_details = await self.schedule_appointment(email)
-            summary_email_content = f"{medical_summary}\n\n{appointment_details}"
-            logger.info("Appointment scheduled. %s", appointment_details)
-
-            return summary_email_content
     async def perform_ocr(self, file_path: str) -> str:
         """Perform OCR on the provided file path and return the extracted text."""
         try:
