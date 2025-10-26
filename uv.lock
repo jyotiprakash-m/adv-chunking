@@ -145,6 +145,7 @@ dependencies = [
     { name = "rich" },
     { name = "semantic-text-splitter" },
     { name = "sendgrid" },
+    { name = "sqlalchemy" },
     { name = "sqlmodel" },
     { name = "uvicorn" },
 ]
@@ -169,6 +170,7 @@ requires-dist = [
     { name = "rich", specifier = ">=14.2.0" },
     { name = "semantic-text-splitter", specifier = ">=0.28.0" },
     { name = "sendgrid", specifier = ">=6.12.5" },
+    { name = "sqlalchemy", specifier = ">=2.0.44" },
     { name = "sqlmodel", specifier = ">=0.0.27" },
     { name = "uvicorn", specifier = ">=0.38.0" },
 ]

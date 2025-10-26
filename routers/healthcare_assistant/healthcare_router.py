@@ -9,12 +9,13 @@ from pydantic import BaseModel, Field
 from agents import Runner, trace, gen_trace_id, Agent,ModelSettings, function_tool
 from dotenv import load_dotenv
 import os
-from openai import AsyncOpenAI
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 import requests
 import tempfile
 from PyPDF2 import PdfReader
+from utils.database import DATABASE_URL,engine
+from sqlmodel import  Field, Session, select
 
 # Load environment variables from .env file
 load_dotenv()
@@ -51,7 +52,6 @@ class HealthManager:
             logger.info(trace_message)
 
             logger.info("Performing OCR on the uploaded file.")
-            # use the provided file path and email parameters (request was undefined)
             extracted_text = await self.perform_ocr(file_path)
 
             logger.info("Analyzing medical data.")
@@ -59,7 +59,7 @@ class HealthManager:
             logger.info("Medical data analyzed.")
 
             logger.info("Scheduling appointment.")
-            appointment_details = await self.schedule_appointment(email)
+            appointment_details = await self.schedule_appointment(email, medical_summary)
             summary_email_content = f"{medical_summary}\n\n{appointment_details}"
             logger.info("Appointment scheduled. %s", appointment_details)
 
@@ -211,11 +211,60 @@ class HealthManager:
         logger.info("Medical summary generated successfully.")
         return str(summary)
 
-    async def schedule_appointment(self, email: str) -> str:
+    async def schedule_appointment(self, email: str, medical_summary: str) -> str:
         """Schedule an appointment and return confirmation details."""
         # Simulate appointment scheduling
-        await asyncio.sleep(1)
-        return "Appointment scheduled for next week."
+        # Agent will find out the specialist and schedule accordingly
+        
+        @function_tool
+        def get_doctors_by_specialist(specialist: str):
+            """Return doctors for a given specialization."""
+            from sqlalchemy.exc import SQLAlchemyError
+
+            try:
+                with Session(engine) as session:
+                    if specialist:
+                        stmt = select(Doctor).where(Doctor.specialist == specialist)
+                    else:
+                        stmt = select(Doctor)
+                    doctors = session.exec(stmt).all()
+                # Return JSON-serializable list
+                return [
+                    {
+                        "id": d.id,
+                        "name": d.name,
+                        "specialist": d.specialist,
+                        "hospital": d.hospital,
+                        "email": d.email,
+                        "contact_no": d.contact_no,
+                        "education": d.education,
+                    }
+                    for d in doctors
+                ]
+            except SQLAlchemyError as e:
+                logger.error("DB Error:", e)
+                return []
+
+
+        specialist_agent = Agent(
+            name="Specialist Finder",
+            instructions="""
+            You are an agent that helps find medical specialists based on the provided medical summary.
+            Given a medical summary, identify the relevant specialist type (e.g., cardiologist, neurologist).
+            Use the `get_doctors_by_specialist` tool to retrieve a list of available doctors in that specialization.
+            Return a brief confirmation message including the specialist type, sample doctor's name, and contact information,hospital, and education.
+
+            Return the final information as plain text (no JSON).
+            """,
+            tools=[get_doctors_by_specialist],
+            model="gpt-4o-mini",
+            model_settings=ModelSettings(temperature=0.3),
+        )
+        specialist = await Runner.run(specialist_agent, medical_summary)
+        specialist_info = getattr(specialist, "final_output", None) or getattr(specialist, "output", None)
+        logger.info(specialist_info)
+
+        return str(specialist_info)
 
 
 @router.post("/run", response_model=Dict[str, Any])
