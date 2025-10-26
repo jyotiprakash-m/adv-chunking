@@ -14,6 +14,7 @@ from sendgrid.helpers.mail import Mail
 import requests
 import tempfile
 from PyPDF2 import PdfReader
+from routers.healthcare_assistant.doctors import Doctor
 from utils.database import DATABASE_URL,engine
 from sqlmodel import  Field, Session, select
 
