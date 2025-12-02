@@ -101,7 +101,7 @@ def model_selector(sln: int) -> Any:
     # --- Define model registry ---
     models = {
         1: OpenAIChatCompletionsModel(
-            model="llama3.2:3b",
+            model="llama3.2:latest",
             openai_client=ollama_client
         ),
         2: OpenAIChatCompletionsModel(

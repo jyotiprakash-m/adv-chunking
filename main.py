@@ -42,7 +42,9 @@ app = FastAPI(
 # =========================================
 # You can update `origins` later to your frontend’s actual domain
 origins = [
-    "http://localhost:3000",
+    "http://98.94.14.94:3000",
+    "https://jyotidev.in",
+    "http://jyotidev.in"
 ]
 
 app.add_middleware(
